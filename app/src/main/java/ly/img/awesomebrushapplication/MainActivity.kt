@@ -92,6 +92,7 @@ class MainActivity : AppCompatActivity() {
 
     @MainThread
     private fun onPressSave() {
+        binding.progressScreen.show()
         CoroutineScope(Dispatchers.Default).launch {
             saveBrushToGallery()
         }
@@ -111,19 +112,25 @@ class MainActivity : AppCompatActivity() {
         // ... instead just use only test images that fit into the available memory.
 
         // Because it can take some time to create the brush, it would be nice to indicate progress here, but only if you have time left.
-        mergeBitmap(bitmapCopy, binding.canvas.getResultBitmap(), binding.canvas.bounds)?.also {
-            withContext(Dispatchers.IO) {
-                val uri = saveImage(it)
-                withContext(Dispatchers.Main) {
-                    startActivity(Intent.createChooser(Intent().apply {
-                        type = "image/*"
-                        action = Intent.ACTION_VIEW
-                        data = uri
-                    }, "Select Gallery App"))
+        val bitmap =
+            mergeBitmap(bitmapCopy, binding.canvas.getResultBitmap(), binding.canvas.bounds)?.also {
+                withContext(Dispatchers.IO) {
+                    val uri = saveImage(it)
+                    withContext(Dispatchers.Main) {
+                        binding.progressScreen.hide()
+                        startActivity(Intent.createChooser(Intent().apply {
+                            type = "image/*"
+                            action = Intent.ACTION_VIEW
+                            data = uri
+                        }, "Select Gallery App"))
+                    }
                 }
             }
+        if (bitmap == null) {
+            withContext(Dispatchers.Main) {
+                binding.progressScreen.hide()
+            }
         }
-
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -142,3 +149,5 @@ class MainActivity : AppCompatActivity() {
         const val GALLERY_INTENT_RESULT = 0
     }
 }
+
+

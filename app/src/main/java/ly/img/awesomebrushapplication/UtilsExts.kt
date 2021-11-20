@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.view.View
 import android.widget.ImageView
 import java.io.File
 
@@ -93,4 +94,12 @@ suspend fun mergeBitmap(back: Bitmap, front: Bitmap?, bounds: RectF?): Bitmap? {
             0f, 0f, null
         )
     }
+}
+
+fun View.show() {
+    visibility = View.VISIBLE
+}
+
+fun View.hide() {
+    visibility = View.GONE
 }
