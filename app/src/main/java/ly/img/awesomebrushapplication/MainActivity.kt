@@ -3,6 +3,7 @@ package ly.img.awesomebrushapplication
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.RectF
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -11,23 +12,24 @@ import androidx.annotation.ColorInt
 import androidx.annotation.MainThread
 import androidx.annotation.WorkerThread
 import androidx.appcompat.app.AppCompatActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import ly.img.awesomebrushapplication.databinding.ActivityMainBinding
-import java.io.OutputStream
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
+    private lateinit var bitmapCopy: Bitmap
+    private lateinit var bounds: RectF
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityMainBinding.inflate(layoutInflater).also {
-            setContentView(it.root)
-        }
-        binding.undoButton.setOnClickListener {
-            binding.canvas.unDo()
-        }
-        binding.redoButton.setOnClickListener {
-            binding.canvas.reDo()
-        }
+        binding = ActivityMainBinding.inflate(layoutInflater).also { setContentView(it.root) }
+        binding.undoButton.setOnClickListener { binding.canvas.unDo() }
+        binding.redoButton.setOnClickListener { binding.canvas.reDo() }
+        binding.addButton.setOnClickListener { onPressLoadImage() }
+        binding.saveButton.setOnClickListener { onPressSave() }
 
         /*
 
@@ -73,14 +75,26 @@ class MainActivity : AppCompatActivity() {
         startActivityForResult(intent, GALLERY_INTENT_RESULT)
     }
 
+
     private fun handleGalleryImage(uri: Uri) {
         // Adjust size of the drawable area, after loading the image.
+        bitmapCopy = getBitmap(uri).copy(Bitmap.Config.RGB_565, false)
+        binding.imageView.apply {
+            setImageBitmap(bitmapCopy)
+        }.post {
+            binding.imageView.getImageBounds()?.let {
+                bounds = it
+                binding.canvas.bounds = it
+            }
+        }
 
     }
 
     @MainThread
     private fun onPressSave() {
-        TODO("saveBrushToGallery() on a background thread.")
+        CoroutineScope(Dispatchers.Default).launch {
+            saveBrushToGallery()
+        }
     }
 
     private fun onChangeColor(@ColorInt color: Int) {
@@ -92,18 +106,24 @@ class MainActivity : AppCompatActivity() {
     }
 
     @WorkerThread
-    private fun saveBrushToGallery() {
+    private suspend fun saveBrushToGallery() {
         // Do not worry about memory here.
         // ... instead just use only test images that fit into the available memory.
 
         // Because it can take some time to create the brush, it would be nice to indicate progress here, but only if you have time left.
-
-        val bitmap: Bitmap = TODO("Create in size of original image, not in screen size!")
-        val outputStream: OutputStream =
-            TODO("Open a ScopedStorage OutputStream and save it in the user's gallery.")
-        outputStream.use {
-            bitmap.compress(Bitmap.CompressFormat.PNG, 0, outputStream)
+        mergeBitmap(bitmapCopy, binding.canvas.getResultBitmap(), binding.canvas.bounds)?.also {
+            withContext(Dispatchers.IO) {
+                val uri = saveImage(it)
+                withContext(Dispatchers.Main) {
+                    startActivity(Intent.createChooser(Intent().apply {
+                        type = "image/*"
+                        action = Intent.ACTION_VIEW
+                        data = uri
+                    }, "Select Gallery App"))
+                }
+            }
         }
+
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

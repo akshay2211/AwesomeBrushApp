@@ -13,11 +13,19 @@ import ly.img.awesomebrushapplication.data.dots
 class BrushCanvas @JvmOverloads constructor(
     context: Context?,
     attrs: AttributeSet? = null,
-    defStyleAttr: Int = 0
+    defStyleAttr: Int = 0,
 ) : View(context, attrs, defStyleAttr) {
     init {
         setWillNotDraw(false)
     }
+
+    var bounds: RectF?
+        get() = brushLifecycle.bounds
+        set(value) {
+            brushLifecycle.bounds = value
+            reset()
+        }
+
 
     private val brushLifecycle = BrushLifecycleImpl()
     private val pathGroup = PathGroup()
@@ -165,6 +173,7 @@ class BrushCanvas @JvmOverloads constructor(
         brushLifecycle.generateBitmap(measuredWidth, measuredHeight)
     }
 
+    fun getResultBitmap():Bitmap? = brushLifecycle.paintBitmap
 
     companion object {
         private const val SMOOTH_VAL = 3

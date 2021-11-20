@@ -23,7 +23,7 @@ internal class BrushLifecycleImpl : BrushLifecycle {
 
     private val undoList = Stack<Path>()
     private val redoList = Stack<Path>()
-
+    var bounds: RectF? = null
     var paintBitmap: Bitmap? = null
         private set
     private var mPaintCanvas: Canvas? = null
@@ -60,7 +60,11 @@ internal class BrushLifecycleImpl : BrushLifecycle {
 
     override fun generateBitmap(measuredWidth: Int, measuredHeight: Int) {
         paintBitmap = Bitmap.createBitmap(measuredWidth, measuredHeight, Bitmap.Config.ARGB_8888)
-        mPaintCanvas = Canvas(paintBitmap!!)
+        bounds?.let {
+            mPaintCanvas = Canvas(paintBitmap!!).apply {
+                this.clipRect(it)
+            }
+        }
     }
 
     override fun bitmapRecycle() {
