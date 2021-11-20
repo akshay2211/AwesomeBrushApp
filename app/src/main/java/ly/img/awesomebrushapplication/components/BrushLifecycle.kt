@@ -1,10 +1,9 @@
 package ly.img.awesomebrushapplication.components
 
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
+import android.graphics.*
+import android.util.Log
 import ly.img.awesomebrushapplication.data.PathGroup
+import java.util.*
 
 /**
  * Created by akshay on 20/11/21
@@ -12,18 +11,23 @@ import ly.img.awesomebrushapplication.data.PathGroup
  */
 
 interface BrushLifecycle {
-    fun unDo()
-    fun reDo()
+    fun unDo(function: (Stack<Path>) -> Unit)
+    fun reDo(function: (Path) -> Unit)
     fun generateBitmap(measuredWidth: Int, measuredHeight: Int)
     fun bitmapRecycle()
     fun draw(canvas: Canvas?, pathGroup: PathGroup)
+    fun pushStack(childPath: Path)
 }
 
 internal class BrushLifecycleImpl : BrushLifecycle {
+
+    private val undoList = Stack<Path>()
+    private val redoList = Stack<Path>()
+
     var paintBitmap: Bitmap? = null
         private set
-    var mPaintCanvas: Canvas? = null
-        private set
+    private var mPaintCanvas: Canvas? = null
+
 
     private val brushStrokePaint = Paint().also {
         it.style = Paint.Style.STROKE
@@ -35,12 +39,23 @@ internal class BrushLifecycleImpl : BrushLifecycle {
     }
 
 
-    override fun unDo() {
-        TODO("Not yet implemented")
+    override fun unDo(function: (Stack<Path>) -> Unit) {
+        Log.e("undo list", "size ${undoList.size}")
+        if (undoList.isNotEmpty()) {
+            redoList.push(undoList.lastElement())
+            undoList.pop()
+            paintBitmap?.eraseColor(Color.TRANSPARENT)
+            function(undoList)
+        }
     }
 
-    override fun reDo() {
-        TODO("Not yet implemented")
+    override fun reDo(function: (Path) -> Unit) {
+        if (redoList.isNotEmpty()) {
+            undoList.push(redoList.lastElement())
+            redoList.pop()
+            paintBitmap?.eraseColor(Color.TRANSPARENT)
+            function(undoList.lastElement())
+        }
     }
 
     override fun generateBitmap(measuredWidth: Int, measuredHeight: Int) {
@@ -60,6 +75,11 @@ internal class BrushLifecycleImpl : BrushLifecycle {
             mPaintCanvas?.drawPath(pathGroup.childPath, brushStrokePaint)
             canvas?.drawBitmap(paintBitmap!!, 0f, 0f, null)
         }
+    }
+
+    override fun pushStack(childPath: Path) {
+        if (redoList.isNotEmpty()) redoList.clear()
+        undoList.add(childPath)
     }
 
 }

@@ -22,6 +22,12 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater).also {
             setContentView(it.root)
         }
+        binding.undoButton.setOnClickListener {
+            binding.canvas.unDo()
+        }
+        binding.redoButton.setOnClickListener {
+            binding.canvas.reDo()
+        }
 
         /*
 

@@ -87,11 +87,10 @@ class BrushCanvas @JvmOverloads constructor(
         }
 
         if (isFirstPoint) {
-            //  pathChild.moveTo(point.x, point.y)
-            val point: Dot = point
-            pathGroup.childPath.moveTo(point.x, point.y)
-            // if (bounds!!.contains(point.x, point.y)) {
-            pathGroup.childPath.addCircle(point.x, point.y, 0f, Path.Direction.CW)
+            pathGroup.childPath.apply {
+                moveTo(point.x, point.y)
+                addCircle(point.x, point.y, 0f, Path.Direction.CW)
+            }
         } else {
             val pointDx: Float
             val pointDy: Float
@@ -119,6 +118,8 @@ class BrushCanvas @JvmOverloads constructor(
             MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
                 result = false
                 pathGroup.path.addPath(pathGroup.childPath)
+                brushLifecycle.pushStack(Path(pathGroup.childPath))
+                pathGroup.childPath.reset()
             }
         }
         this.postInvalidate()
@@ -139,6 +140,23 @@ class BrushCanvas @JvmOverloads constructor(
         super.onMeasure(widthMeasureSpec, heightMeasureSpec)
         if (brushLifecycle.paintBitmap == null) {
             brushLifecycle.generateBitmap(measuredWidth, measuredHeight)
+        }
+    }
+
+    fun unDo() {
+        brushLifecycle.unDo { list ->
+            pathGroup.path.reset()
+            list.forEachIndexed { index, path ->
+                pathGroup.path.addPath(path)
+            }
+            this.postInvalidate()
+        }
+    }
+
+    fun reDo() {
+        brushLifecycle.reDo {
+            pathGroup.path.addPath(it)
+            this.postInvalidate()
         }
     }
 
