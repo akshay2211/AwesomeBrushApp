@@ -1,30 +1,35 @@
 package ly.img.awesomebrushapplication.view
 
 import android.content.Context
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.Path
+import android.graphics.*
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import ly.img.awesomebrushapplication.components.BrushLifecycleImpl
+import ly.img.awesomebrushapplication.data.Dot
+import ly.img.awesomebrushapplication.data.PathGroup
+import ly.img.awesomebrushapplication.data.dots
 
-class BrushCanvas @JvmOverloads constructor(context: Context?, attrs: AttributeSet? = null, defStyleAttr: Int = 0) : View(context, attrs, defStyleAttr) {
+class BrushCanvas @JvmOverloads constructor(
+    context: Context?,
+    attrs: AttributeSet? = null,
+    defStyleAttr: Int = 0
+) : View(context, attrs, defStyleAttr) {
     init {
         setWillNotDraw(false)
     }
 
-    private val brushStrokePaint = Paint().also {
-        it.style = Paint.Style.STROKE
-    }
-    private val path = Path()
+    private val brushLifecycle = BrushLifecycleImpl()
+    private val pathGroup = PathGroup()
 
     override fun onTouchEvent(event: MotionEvent?): Boolean {
-        return super.onTouchEvent(event)
-        // TODO: Implement touch.
+        return event?.let {
+            return@let updatePath(event)
+        } ?: false
     }
 
-    fun updatePath() {
+    private fun updatePath(event: MotionEvent): Boolean {
+        var result = super.onTouchEvent(event)
         // To get a very smooth path we do not simply want to draw lines between two consecutive points,
         // but rather draw a cubic Bezier curve between two consecutive points through two calculated control
         // points. The control points are calculated based on the previous point and the next point, which
@@ -44,21 +49,50 @@ class BrushCanvas @JvmOverloads constructor(context: Context?, attrs: AttributeS
         // points from your custom data structure.
 
         // Note: this should also be replaced by your custom data structure that stores points.
-        data class DummyPosType(
-            var x:Float = 0.0f,
-            var y:Float = 0.0f
-        )
 
-        val isFirstPoint: Boolean = TODO()
+        var isFirstPoint = true
+        var point = Dot(event.x, event.y)
+        var lastPoint = point
+        var nextPoint = point
+        var beforeLastPoint = Dot(0.0f, 0.0f)
+
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> {
+                isFirstPoint = true
+                result = true
+                dots.clear()
+                dots.add(Dot(event.x, event.y))
+            }
+            MotionEvent.ACTION_MOVE -> {
+                result = true
+                isFirstPoint = false
+                dots.add(Dot(event.x, event.y))
+                nextPoint = dots[dots.size - 1]
+                point = dots[dots.size - 2]
+                lastPoint = point
+                when (dots.size) {
+                    1 -> beforeLastPoint = point
+                    2 -> beforeLastPoint = lastPoint
+                    3 -> {
+                        lastPoint = dots[dots.size - 3]
+                        beforeLastPoint = lastPoint
+                    }
+                    else -> {
+                        lastPoint = dots[dots.size - 3]
+                        beforeLastPoint = dots[dots.size - 4]
+                    }
+                }
+
+            }
+        }
+
         if (isFirstPoint) {
-            val point: DummyPosType = TODO("Get the first point of your stroke")
-            path.moveTo(point.x, point.y)
+            //  pathChild.moveTo(point.x, point.y)
+            val point: Dot = point
+            pathGroup.childPath.moveTo(point.x, point.y)
+            // if (bounds!!.contains(point.x, point.y)) {
+            pathGroup.childPath.addCircle(point.x, point.y, 0f, Path.Direction.CW)
         } else {
-            val point: DummyPosType = TODO("Get the current point to draw a cubic Bezier curve to. In the above scenario this would be P3.")
-            val lastPoint: DummyPosType = TODO("The point that you received prior to `point`. In the above scenario this would be P2.")
-            val nextPoint: DummyPosType = TODO("The next point that you're going to draw (P4 in the above scenario or the last you get from onTouchEvent) or null if this is the last point.")
-            val beforeLastPoint: DummyPosType = TODO("The point you received prior to `lastPoint` or `lastPoint` if you didn't receive a point prior to it. In the above scenario this would be P1.")
-
             val pointDx: Float
             val pointDy: Float
             if (nextPoint == null) {
@@ -72,7 +106,7 @@ class BrushCanvas @JvmOverloads constructor(context: Context?, attrs: AttributeS
             val lastPointDx = (point.x - beforeLastPoint.x) / SMOOTH_VAL
             val lastPointDy = (point.y - beforeLastPoint.y) / SMOOTH_VAL
 
-            path.cubicTo(
+            pathGroup.childPath.cubicTo(
                 lastPoint.x + lastPointDx,
                 lastPoint.y + lastPointDy,
                 point.x - pointDx,
@@ -81,30 +115,38 @@ class BrushCanvas @JvmOverloads constructor(context: Context?, attrs: AttributeS
                 point.y
             )
         }
+        when (event.action) {
+            MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
+                result = false
+                pathGroup.path.addPath(pathGroup.childPath)
+            }
+        }
+        this.postInvalidate()
+        return result
     }
 
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
-
-        // TODO: This is only an example code how drawing works in general.
-
-        val w = width.toFloat()
-        val h = height.toFloat()
-
-        brushStrokePaint.color = Color.BLACK
-        brushStrokePaint.strokeWidth = 10.0f
-
-        path.reset()
-        path.moveTo(w * 0.1f, h * 0.1f)
-        path.lineTo(w * 0.9f, h * 0.25f)
-        path.lineTo(w * 0.1f, h * 0.5f)
-        path.lineTo(w * 0.9f, h * 0.75f)
-        path.lineTo(w * 0.1f, h * 0.9f)
-
-        // TODO: If there is time left, try to implement a cache and draw only the last line instead of everything.
-        canvas?.drawPath(path, brushStrokePaint)
-
+        brushLifecycle.draw(canvas, pathGroup)
     }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        brushLifecycle.bitmapRecycle()
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        if (brushLifecycle.paintBitmap == null) {
+            brushLifecycle.generateBitmap(measuredWidth, measuredHeight)
+        }
+    }
+
+    fun reset() {
+        brushLifecycle.bitmapRecycle()
+        brushLifecycle.generateBitmap(measuredWidth, measuredHeight)
+    }
+
 
     companion object {
         private const val SMOOTH_VAL = 3
