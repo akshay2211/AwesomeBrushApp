@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.MediaStore
+import android.widget.Toast
 import androidx.annotation.ColorInt
 import androidx.annotation.MainThread
 import androidx.annotation.WorkerThread
@@ -16,20 +17,28 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import ly.img.awesomebrushapplication.data.showCustomColorDialog
+import ly.img.awesomebrushapplication.data.showStrokeSizeDialog
 import ly.img.awesomebrushapplication.databinding.ActivityMainBinding
+
 
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
-    private lateinit var bitmapCopy: Bitmap
+    private var bitmapCopy: Bitmap? = null
     private lateinit var bounds: RectF
+    private var defaultStrikeWidth = 10
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater).also { setContentView(it.root) }
+
         binding.undoButton.setOnClickListener { binding.canvas.unDo() }
         binding.redoButton.setOnClickListener { binding.canvas.reDo() }
         binding.addButton.setOnClickListener { onPressLoadImage() }
         binding.saveButton.setOnClickListener { onPressSave() }
+        binding.sizeButton.setOnClickListener { showSizeDialog() }
+        binding.colorButton.setOnClickListener { showColorDialog() }
+        binding.resetButton.setOnClickListener { binding.canvas.reset() }
 
         /*
 
@@ -65,6 +74,18 @@ class MainActivity : AppCompatActivity() {
 
     }
 
+    private fun showColorDialog() {
+        showCustomColorDialog {
+            onChangeColor(it)
+        }
+    }
+
+    private fun showSizeDialog() {
+        showStrokeSizeDialog(defaultStrikeWidth, layoutInflater) {
+            onSizeChanged(it)
+        }
+    }
+
     private fun onPressLoadImage() {
         val intent = Intent(Intent.ACTION_PICK)
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.KITKAT) {
@@ -92,6 +113,12 @@ class MainActivity : AppCompatActivity() {
 
     @MainThread
     private fun onPressSave() {
+        if (bitmapCopy == null) {
+            Toast.makeText(this@MainActivity,
+                "Add a image from Gallery First",
+                Toast.LENGTH_SHORT).show()
+            return
+        }
         binding.progressScreen.show()
         CoroutineScope(Dispatchers.Default).launch {
             saveBrushToGallery()
@@ -99,11 +126,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun onChangeColor(@ColorInt color: Int) {
-        // ColorInt (8bit) color is ok, do not waste time here.
+        binding.canvas.setStrokeColor(color)
+        binding.colorButton.setColorFilter(color)
     }
 
     private fun onSizeChanged(size: Float) {
-
+        defaultStrikeWidth = size.toInt()
+        binding.canvas.setStrokeSize(size)
     }
 
     @WorkerThread
@@ -113,7 +142,9 @@ class MainActivity : AppCompatActivity() {
 
         // Because it can take some time to create the brush, it would be nice to indicate progress here, but only if you have time left.
         val bitmap =
-            mergeBitmap(bitmapCopy, binding.canvas.getResultBitmap(), binding.canvas.bounds)?.also {
+            mergeBitmap(bitmapCopy!!,
+                binding.canvas.getResultBitmap(),
+                binding.canvas.bounds)?.also {
                 withContext(Dispatchers.IO) {
                     val uri = saveImage(it)
                     withContext(Dispatchers.Main) {

@@ -5,9 +5,9 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import androidx.annotation.ColorInt
 import ly.img.awesomebrushapplication.components.BrushLifecycleImpl
 import ly.img.awesomebrushapplication.data.Dot
-import ly.img.awesomebrushapplication.data.PathGroup
 import ly.img.awesomebrushapplication.data.dots
 
 class BrushCanvas @JvmOverloads constructor(
@@ -28,7 +28,7 @@ class BrushCanvas @JvmOverloads constructor(
 
 
     private val brushLifecycle = BrushLifecycleImpl()
-    private val pathGroup = PathGroup()
+    private val path = Path()
 
     override fun onTouchEvent(event: MotionEvent?): Boolean {
         return event?.let {
@@ -95,7 +95,7 @@ class BrushCanvas @JvmOverloads constructor(
         }
 
         if (isFirstPoint) {
-            pathGroup.childPath.apply {
+            path.apply {
                 moveTo(point.x, point.y)
                 addCircle(point.x, point.y, 0f, Path.Direction.CW)
             }
@@ -113,7 +113,7 @@ class BrushCanvas @JvmOverloads constructor(
             val lastPointDx = (point.x - beforeLastPoint.x) / SMOOTH_VAL
             val lastPointDy = (point.y - beforeLastPoint.y) / SMOOTH_VAL
 
-            pathGroup.childPath.cubicTo(
+            path.cubicTo(
                 lastPoint.x + lastPointDx,
                 lastPoint.y + lastPointDy,
                 point.x - pointDx,
@@ -125,9 +125,8 @@ class BrushCanvas @JvmOverloads constructor(
         when (event.action) {
             MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
                 result = false
-                pathGroup.path.addPath(pathGroup.childPath)
-                brushLifecycle.pushStack(Path(pathGroup.childPath))
-                pathGroup.childPath.reset()
+                brushLifecycle.pushStack(Path(path))
+                path.reset()
             }
         }
         this.postInvalidate()
@@ -136,7 +135,7 @@ class BrushCanvas @JvmOverloads constructor(
 
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
-        brushLifecycle.draw(canvas, pathGroup)
+        brushLifecycle.draw(canvas, path)
     }
 
     override fun onDetachedFromWindow() {
@@ -153,9 +152,9 @@ class BrushCanvas @JvmOverloads constructor(
 
     fun unDo() {
         brushLifecycle.unDo { list ->
-            pathGroup.path.reset()
+            //pathGroup.path.reset()
             list.forEachIndexed { index, path ->
-                pathGroup.path.addPath(path)
+                //pathGroup.path.addPath(path.path)
             }
             this.postInvalidate()
         }
@@ -163,19 +162,30 @@ class BrushCanvas @JvmOverloads constructor(
 
     fun reDo() {
         brushLifecycle.reDo {
-            pathGroup.path.addPath(it)
+            //pathGroup.path.addPath(it.path)
             this.postInvalidate()
         }
     }
 
     fun reset() {
+        path.reset()
+        brushLifecycle.reset()
         brushLifecycle.bitmapRecycle()
         brushLifecycle.generateBitmap(measuredWidth, measuredHeight)
+        this.postInvalidate()
     }
 
-    fun getResultBitmap():Bitmap? = brushLifecycle.paintBitmap
+    fun getResultBitmap(): Bitmap? = brushLifecycle.paintBitmap
+    fun setStrokeSize(progress: Float) {
+        brushLifecycle.setStrokeSize(progress)
+        this.postInvalidate()
+    }
 
     companion object {
         private const val SMOOTH_VAL = 3
+    }
+
+    fun setStrokeColor(@ColorInt color: Int) {
+        brushLifecycle.setStrokeColor(color)
     }
 }

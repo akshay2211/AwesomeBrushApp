@@ -2,7 +2,8 @@ package ly.img.awesomebrushapplication.components
 
 import android.graphics.*
 import android.util.Log
-import ly.img.awesomebrushapplication.data.PathGroup
+import androidx.annotation.ColorInt
+import ly.img.awesomebrushapplication.data.CustomPath
 import java.util.*
 
 /**
@@ -11,18 +12,21 @@ import java.util.*
  */
 
 interface BrushLifecycle {
-    fun unDo(function: (Stack<Path>) -> Unit)
-    fun reDo(function: (Path) -> Unit)
+    fun unDo(function: (Stack<CustomPath>) -> Unit)
+    fun reDo(function: (CustomPath) -> Unit)
     fun generateBitmap(measuredWidth: Int, measuredHeight: Int)
     fun bitmapRecycle()
-    fun draw(canvas: Canvas?, pathGroup: PathGroup)
+    fun draw(canvas: Canvas?, path: Path)
     fun pushStack(childPath: Path)
+    fun setStrokeSize(progress: Float)
+    fun setStrokeColor(@ColorInt color: Int)
+    fun reset()
 }
 
 internal class BrushLifecycleImpl : BrushLifecycle {
 
-    private val undoList = Stack<Path>()
-    private val redoList = Stack<Path>()
+    private val undoList = Stack<CustomPath>()
+    private val redoList = Stack<CustomPath>()
     var bounds: RectF? = null
     var paintBitmap: Bitmap? = null
         private set
@@ -39,7 +43,7 @@ internal class BrushLifecycleImpl : BrushLifecycle {
     }
 
 
-    override fun unDo(function: (Stack<Path>) -> Unit) {
+    override fun unDo(function: (Stack<CustomPath>) -> Unit) {
         Log.e("undo list", "size ${undoList.size}")
         if (undoList.isNotEmpty()) {
             redoList.push(undoList.lastElement())
@@ -49,7 +53,7 @@ internal class BrushLifecycleImpl : BrushLifecycle {
         }
     }
 
-    override fun reDo(function: (Path) -> Unit) {
+    override fun reDo(function: (CustomPath) -> Unit) {
         if (redoList.isNotEmpty()) {
             undoList.push(redoList.lastElement())
             redoList.pop()
@@ -73,17 +77,44 @@ internal class BrushLifecycleImpl : BrushLifecycle {
         }
     }
 
-    override fun draw(canvas: Canvas?, pathGroup: PathGroup) {
+    override fun draw(canvas: Canvas?, path: Path) {
         if (paintBitmap != null) {
-            mPaintCanvas?.drawPath(pathGroup.path, brushStrokePaint)
-            mPaintCanvas?.drawPath(pathGroup.childPath, brushStrokePaint)
+            for (customPath in undoList) {
+                mPaintCanvas?.drawPath(customPath.path, Paint().apply {
+                    this.style = Paint.Style.STROKE
+                    this.isAntiAlias = true
+                    this.color = customPath.strokeColor
+                    this.strokeJoin = Paint.Join.ROUND
+                    this.strokeCap = Paint.Cap.ROUND
+                    this.strokeWidth = customPath.strokeWidth
+                })
+            }
+
+            mPaintCanvas?.drawPath(path, brushStrokePaint)
             canvas?.drawBitmap(paintBitmap!!, 0f, 0f, null)
         }
     }
 
     override fun pushStack(childPath: Path) {
         if (redoList.isNotEmpty()) redoList.clear()
-        undoList.add(childPath)
+        undoList.add(CustomPath(childPath, brushStrokePaint.strokeWidth, brushStrokePaint.color))
+    }
+
+    override fun setStrokeSize(progress: Float) {
+        brushStrokePaint.apply {
+            this.strokeWidth = progress.toFloat()
+        }
+    }
+
+    override fun setStrokeColor(color: Int) {
+        brushStrokePaint.apply {
+            this.color = color
+        }
+    }
+
+    override fun reset() {
+        undoList.clear()
+        redoList.clear()
     }
 
 }
