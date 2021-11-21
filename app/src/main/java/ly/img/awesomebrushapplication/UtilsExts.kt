@@ -23,13 +23,15 @@ import java.io.File
  * https://ak1.io
  */
 
-internal fun Context.getBitmap(imageUri: Uri) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-    ImageDecoder.decodeBitmap(ImageDecoder.createSource(contentResolver, imageUri))
-} else {
-    MediaStore.Images.Media.getBitmap(contentResolver, imageUri)
-}
+//Bitmap convertor with support of API below 28
+internal fun Context.getBitmap(imageUri: Uri) =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        ImageDecoder.decodeBitmap(ImageDecoder.createSource(contentResolver, imageUri))
+    } else {
+        MediaStore.Images.Media.getBitmap(contentResolver, imageUri)
+    }
 
-
+//To retrieved Bounds to clip brushes on screen
 internal fun ImageView.getImageBounds(): RectF? {
     return RectF().apply {
         if (drawable != null) {
@@ -40,6 +42,7 @@ internal fun ImageView.getImageBounds(): RectF? {
     }
 }
 
+//writing files to storage via scope and normal manner acc. to Api level
 internal fun Context.saveImage(bitmap: Bitmap): Uri? {
     var uri: Uri? = null
     try {
@@ -78,13 +81,19 @@ internal fun Context.saveImage(bitmap: Bitmap): Uri? {
             contentResolver.delete(uri, null, null)
         }
         throw e
-        return null
     }
 }
 
+/**
+ * merging 2 bitmaps
+ * step 1 -> created a blank bitmap of size of image
+ * step 2 -> cropped the brush stroke bitmap acc to image bounds
+ * step 3 -> scaled the cropped bitmap to match image bitmap in size
+ * step 4 -> finally drew all bitmap on single canvas with blank bitmap instance (on step 1)
+ * */
 internal suspend fun mergeBitmap(back: Bitmap, front: Bitmap?, bounds: RectF?): Bitmap? {
-    if (front == null)  return throw Exception("Editor Bitmap is Empty")
-    if (bounds == null) return throw Exception("Bounds are null")
+    if (front == null) throw Exception("Editor Bitmap is Empty")
+    if (bounds == null) throw Exception("Bounds are null")
     return Bitmap.createBitmap(back.width, back.height, Bitmap.Config.ARGB_8888).apply {
         val cropFront = Bitmap.createBitmap(
             front,
@@ -103,10 +112,12 @@ internal suspend fun mergeBitmap(back: Bitmap, front: Bitmap?, bounds: RectF?): 
     }
 }
 
+//visibility extension for any view
 fun View.show() {
     visibility = View.VISIBLE
 }
 
+//visibility extension for any view
 fun View.hide() {
     visibility = View.GONE
 }
@@ -118,6 +129,7 @@ internal fun activityChooser(uri: Uri?) = Intent.createChooser(Intent().apply {
 }, "Select Gallery App")
 
 
+// scaled the actual large image bitmap acc to screen size
 internal fun Bitmap.downScaledToScreenSize(window: Window): Bitmap {
     val display = window.windowManager.defaultDisplay
     val size = Point()
@@ -134,16 +146,17 @@ internal fun Bitmap.downScaledToScreenSize(window: Window): Bitmap {
     return Bitmap.createScaledBitmap(this, finalWidth, finalHeight, false)
 }
 
-internal fun AppCompatActivity.checkAndAskPermission(continueNext:()->Unit) {
+// permission helper to support scope storage API belo 29
+internal fun AppCompatActivity.checkAndAskPermission(continueNext: () -> Unit) {
     if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
         if (ContextCompat.checkSelfPermission(this,
                 permissions[0]) != PackageManager.PERMISSION_GRANTED
         ) {
             ActivityCompat.requestPermissions(this, permissions, MainActivity.PERMISSION_CODE)
-        }else{
+        } else {
             continueNext()
         }
-    }else{
+    } else {
         continueNext()
     }
 }

@@ -38,30 +38,10 @@ class BrushCanvas @JvmOverloads constructor(
 
     private fun updatePath(event: MotionEvent): Boolean {
         var result = super.onTouchEvent(event)
-        // To get a very smooth path we do not simply want to draw lines between two consecutive points,
-        // but rather draw a cubic Bezier curve between two consecutive points through two calculated control
-        // points. The control points are calculated based on the previous point and the next point, which
-        // means that you always have to draw one point in the past.
-        //
-        // Imagine the user is drawing on screen and as the user drags his finger around on the screen, you receive
-        // multiple points. The last point that you receive is point P4. The point that you received prior to that 
-        // is point P3 and so on. Now in order to get a smooth drawing, you'll want to draw a cubic Bezier curve between
-        // P2 and P3 through control points that are calculated using P1 and P4.
-        // 
-        // This also means that in order to actually reach the last point that you've received (P4 in the above scenario),
-        // you'll have to draw once more **after** the user's finger has already left the screen.
-        //
-        // If the user only taps on the screen instead of dragging their finger around, you should draw a point.
-
-        // The algorithm below implements the described behavior from above. You only need to fetch the appropriate
-        // points from your custom data structure.
-
-        // Note: this should also be replaced by your custom data structure that stores points.
-
         var isFirstPoint = true
         var point = Dot(event.x, event.y)
         var lastPoint = point
-        var nextPoint = point
+        var nextPoint : Dot?= point
         var beforeLastPoint = Dot(0.0f, 0.0f)
 
         when (event.action) {
@@ -124,6 +104,7 @@ class BrushCanvas @JvmOverloads constructor(
         }
         when (event.action) {
             MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
+                nextPoint = null
                 result = false
                 brushLifecycle.pushStack(Path(path))
                 path.reset()
@@ -151,18 +132,13 @@ class BrushCanvas @JvmOverloads constructor(
     }
 
     fun unDo() {
-        brushLifecycle.unDo { list ->
-            //pathGroup.path.reset()
-            list.forEachIndexed { index, path ->
-                //pathGroup.path.addPath(path.path)
-            }
+        brushLifecycle.unDo { _ ->
             this.postInvalidate()
         }
     }
 
     fun reDo() {
         brushLifecycle.reDo {
-            //pathGroup.path.addPath(it.path)
             this.postInvalidate()
         }
     }

@@ -12,15 +12,15 @@ import java.util.*
  */
 
 interface BrushLifecycle {
-    fun unDo(function: (Stack<CustomPath>) -> Unit)
-    fun reDo(function: (CustomPath) -> Unit)
-    fun generateBitmap(measuredWidth: Int, measuredHeight: Int)
-    fun bitmapRecycle()
-    fun draw(canvas: Canvas?, path: Path)
-    fun pushStack(childPath: Path)
-    fun setStrokeSize(progress: Float)
-    fun setStrokeColor(@ColorInt color: Int)
-    fun reset()
+    fun unDo(function: (Stack<CustomPath>) -> Unit) // provides Undo functionality
+    fun reDo(function: (CustomPath) -> Unit) // provides ReDo functionality
+    fun generateBitmap(measuredWidth: Int, measuredHeight: Int) // initialises paintBitmap
+    fun bitmapRecycle() // recycles paintBitmap when fragment get removed
+    fun draw(canvas: Canvas?, path: Path) // combines all the elements to draw
+    fun pushStack(childPath: Path) // added every path to stack
+    fun setStrokeSize(progress: Float) // retrieves the stroke width
+    fun setStrokeColor(@ColorInt color: Int) // retrieves the stroke color
+    fun reset() //complete reset and removes all strokes from Image
 }
 
 internal class BrushLifecycleImpl : BrushLifecycle {
