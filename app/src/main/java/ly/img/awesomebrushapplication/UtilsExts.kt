@@ -2,16 +2,20 @@ package ly.img.awesomebrushapplication
 
 import android.content.ContentValues
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.ImageDecoder
-import android.graphics.RectF
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.*
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.view.View
+import android.view.Window
 import android.widget.ImageView
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import ly.img.awesomebrushapplication.data.permissions
 import java.io.File
 
 /**
@@ -19,14 +23,14 @@ import java.io.File
  * https://ak1.io
  */
 
-fun Context.getBitmap(imageUri: Uri) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+internal fun Context.getBitmap(imageUri: Uri) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
     ImageDecoder.decodeBitmap(ImageDecoder.createSource(contentResolver, imageUri))
 } else {
     MediaStore.Images.Media.getBitmap(contentResolver, imageUri)
 }
 
 
-fun ImageView.getImageBounds(): RectF? {
+internal fun ImageView.getImageBounds(): RectF? {
     return RectF().apply {
         if (drawable != null) {
             imageMatrix.mapRect(this, RectF(drawable.bounds))
@@ -36,7 +40,7 @@ fun ImageView.getImageBounds(): RectF? {
     }
 }
 
-fun Context.saveImage(bitmap: Bitmap): Uri? {
+internal fun Context.saveImage(bitmap: Bitmap): Uri? {
     var uri: Uri? = null
     try {
         val fileName = System.nanoTime().toString() + ".jpg"
@@ -59,11 +63,13 @@ fun Context.saveImage(bitmap: Bitmap): Uri? {
             contentResolver.openOutputStream(it).use { output ->
                 bitmap.compress(Bitmap.CompressFormat.PNG, 0, output)
             }
-            values.apply {
-                clear()
-                put(MediaStore.Audio.Media.IS_PENDING, 0)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.apply {
+                    clear()
+                    put(MediaStore.Audio.Media.IS_PENDING, 0)
+                }
+                contentResolver.update(uri, values, null, null)
             }
-            contentResolver.update(uri, values, null, null)
         }
         return uri
     } catch (e: java.lang.Exception) {
@@ -71,13 +77,14 @@ fun Context.saveImage(bitmap: Bitmap): Uri? {
             // Don't leave an orphan entry in the MediaStore
             contentResolver.delete(uri, null, null)
         }
+        throw e
         return null
     }
 }
 
-suspend fun mergeBitmap(back: Bitmap, front: Bitmap?, bounds: RectF?): Bitmap? {
-    if (front == null) return null
-    if (bounds == null) return null
+internal suspend fun mergeBitmap(back: Bitmap, front: Bitmap?, bounds: RectF?): Bitmap? {
+    if (front == null)  return throw Exception("Editor Bitmap is Empty")
+    if (bounds == null) return throw Exception("Bounds are null")
     return Bitmap.createBitmap(back.width, back.height, Bitmap.Config.ARGB_8888).apply {
         val cropFront = Bitmap.createBitmap(
             front,
@@ -102,4 +109,41 @@ fun View.show() {
 
 fun View.hide() {
     visibility = View.GONE
+}
+
+internal fun activityChooser(uri: Uri?) = Intent.createChooser(Intent().apply {
+    type = "image/*"
+    action = Intent.ACTION_VIEW
+    data = uri
+}, "Select Gallery App")
+
+
+internal fun Bitmap.downScaledToScreenSize(window: Window): Bitmap {
+    val display = window.windowManager.defaultDisplay
+    val size = Point()
+    display.getSize(size)
+
+    var finalWidth = size.x
+    var finalHeight = (this.height * size.x) / this.width // with width
+
+    if (finalHeight > size.y) {
+        finalWidth = (this.width * size.y) / this.height // with height
+        finalHeight = size.y
+    }
+
+    return Bitmap.createScaledBitmap(this, finalWidth, finalHeight, false)
+}
+
+internal fun AppCompatActivity.checkAndAskPermission(continueNext:()->Unit) {
+    if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+        if (ContextCompat.checkSelfPermission(this,
+                permissions[0]) != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(this, permissions, MainActivity.PERMISSION_CODE)
+        }else{
+            continueNext()
+        }
+    }else{
+        continueNext()
+    }
 }
