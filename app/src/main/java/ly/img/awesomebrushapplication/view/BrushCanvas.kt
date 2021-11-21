@@ -1,64 +1,85 @@
 package ly.img.awesomebrushapplication.view
 
 import android.content.Context
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.Path
+import android.graphics.*
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
+import androidx.annotation.ColorInt
+import ly.img.awesomebrushapplication.components.BrushLifecycleImpl
+import ly.img.awesomebrushapplication.data.Dot
+import ly.img.awesomebrushapplication.data.dots
 
-class BrushCanvas @JvmOverloads constructor(context: Context?, attrs: AttributeSet? = null, defStyleAttr: Int = 0) : View(context, attrs, defStyleAttr) {
+class BrushCanvas @JvmOverloads constructor(
+    context: Context?,
+    attrs: AttributeSet? = null,
+    defStyleAttr: Int = 0,
+) : View(context, attrs, defStyleAttr) {
     init {
         setWillNotDraw(false)
     }
 
-    private val brushStrokePaint = Paint().also {
-        it.style = Paint.Style.STROKE
-    }
+    var bounds: RectF?
+        get() = brushLifecycle.bounds
+        set(value) {
+            brushLifecycle.bounds = value
+            reset()
+        }
+
+
+    private val brushLifecycle = BrushLifecycleImpl()
     private val path = Path()
 
     override fun onTouchEvent(event: MotionEvent?): Boolean {
-        return super.onTouchEvent(event)
-        // TODO: Implement touch.
+        return event?.let {
+            return@let updatePath(event)
+        } ?: false
     }
 
-    fun updatePath() {
-        // To get a very smooth path we do not simply want to draw lines between two consecutive points,
-        // but rather draw a cubic Bezier curve between two consecutive points through two calculated control
-        // points. The control points are calculated based on the previous point and the next point, which
-        // means that you always have to draw one point in the past.
-        //
-        // Imagine the user is drawing on screen and as the user drags his finger around on the screen, you receive
-        // multiple points. The last point that you receive is point P4. The point that you received prior to that 
-        // is point P3 and so on. Now in order to get a smooth drawing, you'll want to draw a cubic Bezier curve between
-        // P2 and P3 through control points that are calculated using P1 and P4.
-        // 
-        // This also means that in order to actually reach the last point that you've received (P4 in the above scenario),
-        // you'll have to draw once more **after** the user's finger has already left the screen.
-        //
-        // If the user only taps on the screen instead of dragging their finger around, you should draw a point.
+    private fun updatePath(event: MotionEvent): Boolean {
+        var result = super.onTouchEvent(event)
+        var isFirstPoint = true
+        var point = Dot(event.x, event.y)
+        var lastPoint = point
+        var nextPoint : Dot?= point
+        var beforeLastPoint = Dot(0.0f, 0.0f)
 
-        // The algorithm below implements the described behavior from above. You only need to fetch the appropriate
-        // points from your custom data structure.
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> {
+                isFirstPoint = true
+                result = true
+                dots.clear()
+                dots.add(Dot(event.x, event.y))
+            }
+            MotionEvent.ACTION_MOVE -> {
+                result = true
+                isFirstPoint = false
+                dots.add(Dot(event.x, event.y))
+                nextPoint = dots[dots.size - 1]
+                point = dots[dots.size - 2]
+                lastPoint = point
+                when (dots.size) {
+                    1 -> beforeLastPoint = point
+                    2 -> beforeLastPoint = lastPoint
+                    3 -> {
+                        lastPoint = dots[dots.size - 3]
+                        beforeLastPoint = lastPoint
+                    }
+                    else -> {
+                        lastPoint = dots[dots.size - 3]
+                        beforeLastPoint = dots[dots.size - 4]
+                    }
+                }
 
-        // Note: this should also be replaced by your custom data structure that stores points.
-        data class DummyPosType(
-            var x:Float = 0.0f,
-            var y:Float = 0.0f
-        )
+            }
+        }
 
-        val isFirstPoint: Boolean = TODO()
         if (isFirstPoint) {
-            val point: DummyPosType = TODO("Get the first point of your stroke")
-            path.moveTo(point.x, point.y)
+            path.apply {
+                moveTo(point.x, point.y)
+                addCircle(point.x, point.y, 0f, Path.Direction.CW)
+            }
         } else {
-            val point: DummyPosType = TODO("Get the current point to draw a cubic Bezier curve to. In the above scenario this would be P3.")
-            val lastPoint: DummyPosType = TODO("The point that you received prior to `point`. In the above scenario this would be P2.")
-            val nextPoint: DummyPosType = TODO("The next point that you're going to draw (P4 in the above scenario or the last you get from onTouchEvent) or null if this is the last point.")
-            val beforeLastPoint: DummyPosType = TODO("The point you received prior to `lastPoint` or `lastPoint` if you didn't receive a point prior to it. In the above scenario this would be P1.")
-
             val pointDx: Float
             val pointDy: Float
             if (nextPoint == null) {
@@ -81,32 +102,66 @@ class BrushCanvas @JvmOverloads constructor(context: Context?, attrs: AttributeS
                 point.y
             )
         }
+        when (event.action) {
+            MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_UP -> {
+                nextPoint = null
+                result = false
+                brushLifecycle.pushStack(Path(path))
+                path.reset()
+            }
+        }
+        this.postInvalidate()
+        return result
     }
 
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
+        brushLifecycle.draw(canvas, path)
+    }
 
-        // TODO: This is only an example code how drawing works in general.
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        brushLifecycle.bitmapRecycle()
+    }
 
-        val w = width.toFloat()
-        val h = height.toFloat()
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+        if (brushLifecycle.paintBitmap == null) {
+            brushLifecycle.generateBitmap(measuredWidth, measuredHeight)
+        }
+    }
 
-        brushStrokePaint.color = Color.BLACK
-        brushStrokePaint.strokeWidth = 10.0f
+    fun unDo() {
+        brushLifecycle.unDo { _ ->
+            this.postInvalidate()
+        }
+    }
 
+    fun reDo() {
+        brushLifecycle.reDo {
+            this.postInvalidate()
+        }
+    }
+
+    fun reset() {
         path.reset()
-        path.moveTo(w * 0.1f, h * 0.1f)
-        path.lineTo(w * 0.9f, h * 0.25f)
-        path.lineTo(w * 0.1f, h * 0.5f)
-        path.lineTo(w * 0.9f, h * 0.75f)
-        path.lineTo(w * 0.1f, h * 0.9f)
+        brushLifecycle.reset()
+        brushLifecycle.bitmapRecycle()
+        brushLifecycle.generateBitmap(measuredWidth, measuredHeight)
+        this.postInvalidate()
+    }
 
-        // TODO: If there is time left, try to implement a cache and draw only the last line instead of everything.
-        canvas?.drawPath(path, brushStrokePaint)
-
+    fun getResultBitmap(): Bitmap? = brushLifecycle.paintBitmap
+    fun setStrokeSize(progress: Float) {
+        brushLifecycle.setStrokeSize(progress)
+        this.postInvalidate()
     }
 
     companion object {
         private const val SMOOTH_VAL = 3
+    }
+
+    fun setStrokeColor(@ColorInt color: Int) {
+        brushLifecycle.setStrokeColor(color)
     }
 }
